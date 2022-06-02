@@ -19,4 +19,9 @@
       <Filter>資源檔</Filter>
     </ClCompile>
   </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="EmbeddingPython.h">
+      <Filter>標頭檔</Filter>
+    </ClInclude>
+  </ItemGroup>
 </Project>

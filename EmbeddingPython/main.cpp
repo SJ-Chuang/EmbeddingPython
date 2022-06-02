@@ -1,64 +1,42 @@
 #include <iostream>
 #include "Python.h"
 #include <opencv2/opencv.hpp>
+#include "EmbeddingPython.h"
 
 using namespace std;
 using namespace cv;
-
-PyObject* mat2PyList(Mat imgMat) {
-	PyObject* imgList = PyList_New(imgMat.total() * imgMat.channels());
-	int idx = 0;
-	for (int y = 0; y < imgMat.rows; ++y) {
-		for (int x = 0; x < imgMat.cols; ++x) {
-			for (int c = 0; c < imgMat.channels(); ++c) {
-				PyList_SetItem(imgList, idx, Py_BuildValue("i", (int)imgMat.at<Vec3b>(y, x)[c]));
-				idx++;
-			}
-		}
-	}
-	return imgList;
-}
-
-Mat PyList2mat(int height, int width, PyObject* imgList) {
-	Mat imgMat(height * width, 3, CV_8U);
-	for (int idx = 0; idx < PyList_Size(imgList); ++idx) {
-		imgMat.at<UINT8>(idx / 3, idx % 3) = _PyLong_AsInt(PyList_GetItem(imgList, idx));
-	}
-	Mat outMat = imgMat.reshape(3, height);
-	return outMat;
-}
+using namespace empy;
 
 int main(int argc, char* argv[]) {
-	Py_Initialize();
-	
-	PyRun_SimpleString("print('Hello World from Embedded Python!')");
-	
-	int a = 36;
-	PyObject* math = PyImport_Import(PyUnicode_FromString("math"));
-	PyObject* sqrt = PyObject_GetAttrString(math, "sqrt");
-	PyObject* val = PyObject_CallObject(sqrt, Py_BuildValue("(i)", a));
-	cout << "The square root of " << a << " is " << _PyLong_AsInt(val) << endl;
-	
-	int b = 5;
-	int c = 4;
-	PyRun_SimpleString("import sys; sys.path.insert(0, '')");
-	PyObject* func = PyImport_Import(PyUnicode_FromString("func"));
-	PyObject* dot = PyObject_GetAttrString(func, "dot");
-	PyObject* result = PyObject_CallObject(dot, Py_BuildValue("(i, i)", b, c));
-	cout << b << " x " << c << " = " << _PyLong_AsInt(result) << endl;
-		
+	// Create a new PyManager
+	PyManager* pm = new PyManager();
+
+	// Execute python with string
+	pm->execute("print('Hello World from Embedded Python!')");
+
+	// Import the built-in module
+	PyModule math = pm->pyimport("math");
+	PyObject* val = Py_BuildValue("(i)", 36);
+	PyObject* root = math.getattr("sqrt")(val);
+	printf("The square root of 36 is %i.\n", _PyLong_AsInt(root));
+
+	// Import the custom module (Place func.py in the same folder as main.cpp)
+	PyModule func = pm->pyimport("func");
+	PyObject* vals = Py_BuildValue("(i, i)", 4, 5);
+	PyObject* dot_result = func.getattr("dot")(vals);
+	printf("4 x 5 = %i\n", _PyLong_AsInt(dot_result));
+
+	// Gaussian blur an image with custom module
+	transforms T;
 	Mat img = imread("image.jpg");
-	if (img.empty()) {
-		cout << "img is empty" << endl;
-		return 0;
-	}
-		
-	PyObject* imgList = mat2PyList(img);
-	PyObject* gaussianblur = PyObject_GetAttrString(func, "gaussianblur");
-	PyObject* blur = PyObject_CallObject(gaussianblur, Py_BuildValue("(i, i, O)", img.rows, img.cols, imgList));
-	Mat blur_img = PyList2mat(img.rows, img.cols, blur);
-	imwrite("blur.jpg", blur_img);
+	PyObject* imgList = T.mat2PyList(img); // Transforms a Mat to a python list
+	PyObject* imgInfo = Py_BuildValue("(i, i, O)", img.rows, img.cols, imgList);
+	PyObject* blurList = func.getattr("gaussianblur")(imgInfo); // Blur an image
+	Mat blur = T.PyList2mat(img.rows, img.cols, blurList); // Transforms a python list to a Mat
+	imwrite("blur.jpg", blur);
 	
-	Py_Finalize();
+	// Delete the PyManager
+	delete pm;
+
 	return 0;
 }
